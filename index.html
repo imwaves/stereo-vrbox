@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - effects - stereo</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="main.css">
+	</head>
+
+	<body>
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "./three.module.js",
+					"three/addons/": "./jsm/"
+				}
+			}
+		</script>
+
+		<script type="module">
+
+			import * as THREE from 'three';
+
+			import { StereoEffect } from 'three/addons/effects/StereoEffect.js';
+
+			let container, camera, scene, renderer, effect;
+
+			const spheres = [];
+			const rad = Math.PI / 180;
+
+			let mouseX = 0, mouseY = 0;
+
+			let windowHalfX = window.innerWidth / 2;
+			let windowHalfY = window.innerHeight / 2;
+
+			document.addEventListener( 'mousemove', onDocumentMouseMove );
+
+			init();
+			animate();
+
+			function init() {
+
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 100000 );
+				camera.position.z = 3200;
+
+				scene = new THREE.Scene();
+				scene.background = new THREE.CubeTextureLoader()
+					.setPath( 'textures/cube/Park3Med/' )
+					.load( [ 'px.jpg', 'nx.jpg', 'py.jpg', 'ny.jpg', 'pz.jpg', 'nz.jpg' ] );
+
+				// const geometry = new THREE.SphereGeometry( 100, 32, 16 );
+				const geometry = new THREE.BoxGeometry( 150, 150, 150 );
+
+				const textureCube = new THREE.CubeTextureLoader()
+					.setPath( 'textures/cube/Park3Med/' )
+					.load( [ 'px.jpg', 'nx.jpg', 'py.jpg', 'ny.jpg', 'pz.jpg', 'nz.jpg' ] );
+				textureCube.mapping = THREE.CubeRefractionMapping;
+
+				const material = new THREE.MeshBasicMaterial( { color: 0xffffff, envMap: textureCube, refractionRatio: 0.3 } );
+
+				for ( let i = 0; i < 500; i ++ ) {
+
+					const mesh = new THREE.Mesh( geometry, material );
+					mesh.position.x = Math.random() * 10000 - 5000;
+					mesh.position.y = Math.random() * 10000 - 5000;
+					mesh.position.z = Math.random() * 10000 - 5000;
+					mesh.rotation.x = Math.random() * 360;
+					mesh.rotation.y = Math.random() * 360;
+					mesh.rotation.z = Math.random() * 360;
+					mesh.scale.x = mesh.scale.y = mesh.scale.z = Math.random() * 3 + 1;
+					scene.add( mesh );
+
+					spheres.push( mesh );
+
+				}
+
+				//
+
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				container.appendChild( renderer.domElement );
+
+				effect = new StereoEffect( renderer );
+				effect.setSize( window.innerWidth, window.innerHeight );
+
+				//
+
+				window.addEventListener( 'resize', onWindowResize );
+
+			}
+
+			function onWindowResize() {
+
+				windowHalfX = window.innerWidth / 2;
+				windowHalfY = window.innerHeight / 2;
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				effect.setSize( window.innerWidth, window.innerHeight );
+				console.log('onWindowResize')
+			}
+
+			function onDocumentMouseMove( event ) {
+
+				mouseX = ( event.clientX - windowHalfX ) * 10;
+				mouseY = ( event.clientY - windowHalfY ) * 10;
+
+			}
+
+			//
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				render();
+
+			}
+
+			const rot = { x:0, y:0, z:0 };
+
+			const orientations = [
+			  ['landscape left', 'landscape right'],  // device x axis points up/down
+			  ['portrait', 'portrait upside down'],   // device y axis points up/down
+			  ['display up', 'display down'],         // device z axis points up/down
+			];
+			const { Quaternion } = THREE;
+			let orientation = '';
+			function onOrientationChange (ev) {
+				// const euler = new THREE.Euler( ev.alpha * rad, ev.beta * rad, ev.gamma * rad, 'ZXY' );
+				const euler = new THREE.Euler(
+					ev.gamma * rad/* + Math.PI / 2*/,
+					-ev.beta * rad,
+					-ev.alpha * rad,
+				// 'ZXY' );
+				'XYZ' );
+			  const q = new Quaternion()
+			  q.setFromEuler(euler);
+
+			  // transform an upward-pointing vector to device coordinates
+			  const vec = q.conjugate()/*.rotateVector([0, 0, 1])*/;
+			  camera.setRotationFromQuaternion(vec);
+			  camera.rotation.x -= 90 * rad;
+
+			  // find the axis with the largest absolute value
+			  // const [value, axis] = vec.toJSON().reduce((acc, cur, idx) => (Math.abs(cur) < Math.abs(acc[0]) ? acc : [cur, idx]), [0, 0]);
+
+			  // const _orientation = orientations[axis][1 * (value < 0)];
+			  // if (_orientation !== orientation) {
+			  // 	orientation = _orientation;
+			  // 	console.log(orientation);
+			  // }
+			}
+			function onOrientationPermission () {
+				window.addEventListener("deviceorientation", onOrientationChange);
+			}
+
+			document.body.addEventListener('click', () => {
+				if (DeviceOrientationEvent && DeviceOrientationEvent.requestPermission)
+					DeviceOrientationEvent.requestPermission()
+						.then(onOrientationPermission).catch(err => alert(err))
+				else
+					onOrientationPermission();
+				// try {
+				// 	document.body.webkitRequestFullScreen()
+				// 	console.log('webkitRequestFullScreen!');
+				// } catch (e) {}
+				try {
+					document.body.requestFullscreen({ navigationUI: 'hide' })
+					console.log('requestFullscreen!');
+					setTimeout(() => {
+						onWindowResize();
+						screen.orientation.lock('landscape')
+					}, 5e3)
+				} catch (e) {}
+				try {
+					document.body.enterFullScreen()
+					console.log('enterFullScreen!');
+				} catch (e) {}
+			});
+
+			function degToRad (v) { return v * Math.PI / 180 }
+
+			function render() {
+
+				const timer = 0.0001 * Date.now();
+
+				// camera.position.x += ( mouseX - camera.position.x ) * .05;
+				// camera.position.y += ( - mouseY - camera.position.y ) * .05;
+				// camera.lookAt( scene.position );
+
+				for ( let i = 0, il = spheres.length; i < il; i ++ ) {
+
+					const sphere = spheres[ i ];
+
+					sphere.position.x = 5000 * Math.cos( timer + i );
+					sphere.position.y = 5000 * Math.sin( timer + i * 1.1 );
+
+				}
+
+				effect.render( scene, camera );
+
+			}
+
+		</script>
+
+	</body>
+</html>
